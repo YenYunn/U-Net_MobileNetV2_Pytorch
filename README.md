@@ -5,12 +5,21 @@ Glone this repo, and create an environment and run:
 
 `pip install -r requirements.txt`
 
-## 🔍Prediction
-
-To predict a single image and save it:
-
-`python predict.py --model_path model.pt/pth --image_path image.jpg --device 0 --save_mask`
-
+---
+## 📂 Dataset Format
+```
+data/
+│── images/
+│   │── xxxx.jpg
+│   │── xxxx_mask.png
+│   │── xxxx.jpg
+│   │── xxxx_mask.png
+│   │── ...
+│   │── ...
+│   │── ...
+│   │── label_names.txt
+```
+---
 
 ## 🎯 Training
 
@@ -48,7 +57,14 @@ optional arguments:
   --device DEVICE                          Training device (e.g., cuda:0 or cpu) (default: cuda:0)
   --num_workers NUM_WORKERS                Number of dataloader workers (default: 0)
 ```
+---
+## 🔍Prediction
+
+To predict a single image and save it:
+
+`python predict.py --model_path model.pt/pth --image_path image.jpg --device 0 --save_mask`
 
 
+---
 ## 📚Reference
 https://github.com/milesial/Pytorch-UNet
