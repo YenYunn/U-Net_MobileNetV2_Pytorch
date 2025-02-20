@@ -1,7 +1,10 @@
 import argparse
 import os
+import re
 import csv
+import math
 import logging
+import numpy as np
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -29,10 +32,14 @@ def plot_all_metrics(scores_dict, save_path='metrics_combined.png'):
     metrics = list(scores_dict.keys())
     num_metrics = len(metrics)
 
-    fig, axes = plt.subplots(nrows=num_metrics, ncols=1, figsize=(15, 5 * num_metrics))
+    num_cols = 3
+    num_rows = math.ceil(num_metrics / num_cols)
+    fig, axes = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(15, 5 * num_rows))
+
+    axes = np.array(axes).flatten()
 
     for i, (name, scores) in enumerate(scores_dict.items()):
-        ax = axes[i] if num_metrics > 1 else axes
+        ax = axes[i]
         ax.plot(range(len(scores['train'])), scores['train'], label=f'train {name}')
         ax.plot(range(len(scores['valid'])), scores['valid'], label=f'val {name}')
         ax.set_title(f'{name} plot')
@@ -40,20 +47,32 @@ def plot_all_metrics(scores_dict, save_path='metrics_combined.png'):
         ax.set_ylabel(name)
         ax.legend()
 
+    for j in range(num_metrics, len(axes)):
+        fig.delaxes(axes[j])
+
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()
 
 
-def plot_metrics_curve(scores, name):
-    plt.figure(figsize=(15, 5))
-    plt.plot(range(len(scores['train'])), scores['train'], label=f'train {name}')
-    plt.plot(range(len(scores['train'])), scores['valid'], label=f'val {name}')
-    plt.title(f'{name} plot')
-    plt.xlabel('Epoch')
-    plt.ylabel(f'{name}')
-    plt.legend()
-    plt.show()
+def get_next_train_folder(base_path):
+    os.makedirs(base_path, exist_ok=True)
+
+    existing_dirs = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
+
+    train_dirs = [d for d in existing_dirs if re.fullmatch(r'train\d*', d)]
+
+    if 'train' not in train_dirs:
+        new_train_folder = os.path.join(base_path, 'train')
+    else:
+        train_numbers = [int(re.search(r'\d+', d).group()) if re.search(r'\d+', d) else 0 for d in train_dirs]
+        next_train_num = max(train_numbers, default=0) + 1
+        new_train_folder = os.path.join(base_path, f'train{next_train_num}')
+
+    # 創建新的資料夾
+    os.makedirs(new_train_folder, exist_ok=True)
+
+    return new_train_folder
 
 
 def main(args):
@@ -68,7 +87,6 @@ def main(args):
     ENCODER = args.encoder
     ENCODER_WEIGHTS = args.encoder_weights if args.encoder_weights.lower() != 'none' else None
     ACTIVATION = args.activation
-    experiment_name = args.name
     loss_metric = 'combined_loss'
 
     learning_rate = args.learning_rate
@@ -79,7 +97,8 @@ def main(args):
     # Split dataset into train/val sets
     split_data(args.data_path)
 
-    os.makedirs(model_savepath, exist_ok=True)
+    train_folder = get_next_train_folder(model_savepath)
+
     continue_training = bool(args.pretrained_weights_path)
     model_path = args.pretrained_weights_path if continue_training else None
 
@@ -142,8 +161,12 @@ def main(args):
 
     # training
     epoch = args.epochs
-    dice_file_path = 'model/UNet_training_metrics.csv'
-    with open(dice_file_path, 'w', newline='') as dice_file:
+    weights_folder = os.path.join(train_folder, 'weights')
+    os.makedirs(weights_folder, exist_ok=True)
+
+    result_csv_path = os.path.join(train_folder, 'results.csv')
+
+    with open(result_csv_path, 'w', newline='') as dice_file:
         csv_writer = csv.writer(dice_file)
         csv_writer.writerow([
             'Epoch', 'Train Dice', 'Validation Dice', 'Train IoU', 'Validation IoU',
@@ -186,13 +209,15 @@ def main(args):
             ])
 
             if max_score < valid_logs.get('iou_score', 0):
-                max_score = valid_logs.get('iou_score', 0)
-                f = valid_logs.get('fscore', 0)
-                ms = round(max_score, 3)
-                torch.save(model, model_savepath + f'/{experiment_name}-{i}-{ms}-{f}.pt')
-                print('Model saved!', model_savepath + f'/{experiment_name}-{i}-{ms}-{f}.pt')
+                save_model_path = os.path.join(weights_folder, 'best.pt')
+                torch.save(model, save_model_path)
+                print(f'Model saved! {save_model_path}')
 
             optimizer.param_groups[0]['lr'] = learning_rate * decay_rate ** (i / decay_steps)
+
+        last_model_path = os.path.join(weights_folder, 'last.pt')
+        torch.save(model, last_model_path)
+        print(f'Final model saved! f{last_model_path}')
 
         scores_dict = {
             'loss': losses,
@@ -204,14 +229,8 @@ def main(args):
             'warping_error': WarpingError
         }
 
-        plot_all_metrics(scores_dict, 'results.png')
-        # plot_metrics_curve(losses, 'loss')
-        # plot_metrics_curve(ious, 'iou')
-        # plot_metrics_curve(DICE, 'dice_score')
-        # plot_metrics_curve(PRECISION, 'precision')
-        # plot_metrics_curve(RECALL, 'recall')
-        # plot_metrics_curve(ACCURACY, 'accuracy')
-        # plot_metrics_curve(WarpingError, 'warping_error')
+        plot_path = os.path.join(train_folder, 'results.png')
+        plot_all_metrics(scores_dict, plot_path)
 
 
 if __name__ == '__main__':
@@ -228,7 +247,6 @@ if __name__ == '__main__':
     parser.add_argument('--activation', type=str, default='sigmoid', help='Activation function')
 
     # Training Hyperparameters
-    parser.add_argument('--name', type=str, default='EMS', help='pretrained weights path')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--classes', type=int, default=1, help='number of classes')
     parser.add_argument('--batch_size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
