@@ -62,7 +62,7 @@ optional arguments:
 
 To predict a single image and save it:
 
-`python predict.py --model_path model.pt/pth --image_path image.jpg --device 0 --save_mask`
+`python predict.py --model_path model.pt/pth --input image.jpg/video.mp4 --device 0 --save_mask`
 
 
 ---
