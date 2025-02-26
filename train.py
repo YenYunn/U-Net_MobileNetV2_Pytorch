@@ -3,6 +3,7 @@ import os
 import re
 import csv
 import math
+import yaml
 import logging
 import numpy as np
 
@@ -26,6 +27,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+
+def save_hyperparameters(args, save_path):
+    hyperparameters = vars(args)
+    with open(save_path, 'w') as f:
+        yaml.dump(hyperparameters, f, default_flow_style=False, sort_keys=False)
 
 
 def plot_all_metrics(scores_dict, save_path='metrics_combined.png'):
@@ -69,7 +76,6 @@ def get_next_train_folder(base_path):
         next_train_num = max(train_numbers, default=0) + 1
         new_train_folder = os.path.join(base_path, f'train{next_train_num}')
 
-    # 創建新的資料夾
     os.makedirs(new_train_folder, exist_ok=True)
 
     return new_train_folder
@@ -98,6 +104,10 @@ def main(args):
     split_data(args.data_path)
 
     train_folder = get_next_train_folder(model_savepath)
+
+    hyperparam_path = os.path.join(train_folder, 'args.yaml')
+    save_hyperparameters(args, hyperparameter_path)
+    logger.info(f'Hyperparameters saved at: {hyperparam_path}')
 
     continue_training = bool(args.pretrained_weights_path)
     model_path = args.pretrained_weights_path if continue_training else None
@@ -209,6 +219,7 @@ def main(args):
             ])
 
             if max_score < valid_logs.get('iou_score', 0):
+                max_score = valid_logs['iou_score']
                 save_model_path = os.path.join(weights_folder, 'best.pt')
                 torch.save(model, save_model_path)
                 print(f'Model saved! {save_model_path}')
