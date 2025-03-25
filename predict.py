@@ -5,11 +5,11 @@ import argparse
 import numpy as np
 from torchvision import transforms
 
+
 INPUT_IMAGE_WIDTH = 320
 INPUT_IMAGE_HEIGHT = 320
 DEFAULT_X_START = 640
 DEFAULT_CROP_WIDTH = 640
-
 
 def load_model(model_path, device):
     model = torch.load(model_path, map_location=device)
@@ -44,7 +44,6 @@ def predict_mask(image, model, device):
 
     inference_time = (end_inference - start_inference) / cv2.getTickFrequency() * 1000  # 轉換為 ms
 
-    # pr_mask_img = (pr_mask.squeeze().cpu().numpy() > 0.7).astype(np.uint8)
     pr_mask_img = pr_mask.squeeze().cpu().numpy().round()
     pr_mask_img = cv2.resize(pr_mask_img, (crop_image_original.shape[1], crop_image_original.shape[0]),
                              interpolation=cv2.INTER_NEAREST)
@@ -64,6 +63,8 @@ def visualize_results(image, mask):
     cv2.imshow('Overlay Result', blended)
     cv2.imshow('Original Image', image)
     cv2.waitKey(0)
+
+    return pred_mask_show
 
 
 def show_video_results(frame, mask):
@@ -85,7 +86,6 @@ def process_folder(folder_path, model, device):
         crop_img, mask, inference_time = predict_mask(image, model, device)
         visualize_results(crop_img, mask)
         print(f'Processed {image_file} - Inference Time: {inference_time:.2f} ms')
-
 
 def process_video(video_path, model, device):
     cap = cv2.VideoCapture(video_path)
@@ -158,13 +158,13 @@ def main():
     else:
         image = cv2.imdecode(np.fromfile(args.input, dtype=np.uint8), -1)
         crop_img, mask, inference_time = predict_mask(image, model, device)
-        visualize_results(crop_img, mask)
+        mask = visualize_results(crop_img, mask)
 
         print(f'Inference Time: {inference_time:.2f} ms')
 
         if args.save_mask:
             output_path = os.path.splitext(args.input)[0] + '_mask.png'
-            save_mask(mask, output_path)
+            cv2.imencode('.png', mask)[1].tofile(output_path)
             print(f'Mask saved at: {output_path}')
 
     cv2.destroyAllWindows()
